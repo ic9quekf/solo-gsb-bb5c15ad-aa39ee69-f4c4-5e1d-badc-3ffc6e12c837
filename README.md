@@ -1,9 +1,14 @@
-# 编织说明逐行针数校验
+# 编织说明逐行针数校验 · 线材用量估算
 
 输入尺码与起针数、每行编织指令，逐行推算消耗/产出针数：每个尺码独立地以上一行的
 产出作为下一行的可用针数；某尺码针数不足或超出时仅停止该尺码，其余尺码继续推算。
 页面并排展示各尺码的有效行、首个错误与最终针数；指令本身非法（含倍数项数与尺码数
 不符）时报原文行号与字符位置。也提供单尺码校验接口。
+
+多尺码校验可同时估算线材用量：填写 `k`/`p`/`yo`/`k2tog` 的单个记号克重、损耗百分比
+与每团克重后，按每个尺码的实际记号次数（嵌套重复与 `*{a|b|c}` 按尺码分别累计）
+逐行累计原始克重，并给出含损耗总量与向上取整的建议线团数；某尺码在出错行停止时，
+其用量标记为“部分估算”。
 
 ## 指令语法
 
@@ -75,7 +80,15 @@ python app.py            # 开发方式
 
 ### 多尺码校验 `POST /api/validate-sizes`
 
-请求体 JSON（`sizes` 按顺序给出尺码名与起针数，`*{...}` 依此顺序取值）：
+请求体 JSON（`sizes` 按顺序给出尺码名与起针数，`*{...}` 依此顺序取值）。
+可选的 `yarn` 用于线材用量估算：
+
+- `weights`：`k`、`p`、`yo`、`k2tog` 的单个记号克重，均为非负数字，缺失按 `0` 处理；
+- `waste_percent`：损耗百分比，非负数字（如 `10` 表示 10%），缺失按 `0` 处理；
+- `ball_grams`：每团克重，必须为正数。
+
+数字参数接受 JSON 数字或字符串（`"50"`、`"10%"` 均可）；不给 `yarn` 时响应与
+原先完全一致（不返回任何用量字段）。
 
 ```json
 {
@@ -84,12 +97,25 @@ python app.py            # 开发方式
     {"name": "M", "cast_on": 16},
     {"name": "L", "cast_on": 20}
   ],
-  "pattern": "(k2tog yo)*{6|8|10}\np*{12|16|20}\n(k2tog)*{6|8|10}"
+  "pattern": "(k2tog yo)*{6|8|10}\np*{12|16|20}\n(k2tog)*{6|8|10}",
+  "yarn": {
+    "weights": {"k": 1, "p": 1, "yo": 0.3, "k2tog": 2},
+    "waste_percent": 10,
+    "ball_grams": 50
+  }
 }
 ```
 
 响应：`sizes` 中每个尺码独立返回有效行 `rows`、首个错误 `error` 与最终针数
 `final`（最后一行有效推算后的针数）；`ok` 为全部尺码是否都通过。
+给出 `yarn` 时，每行另带 `weight`（该尺码截至该行的**累计原始克重**），尺码结果
+另带 `yarn` 用量摘要：
+
+- `raw_total`：原始总量 = 各记号实际次数 × 单个记号克重之和（克）；
+- `with_waste`：含损耗总量 = `raw_total × (1 + waste_percent/100)`（克）；
+- `balls`：建议线团数 = 含损耗总量除以每团克重后**向上取整**（总量为 0 时为 0）；
+- `partial`：该尺码未走完全部指令行（针数错误只停该尺码，语法错误停全部尺码）时为
+  `true`，即用量为**部分估算**。
 
 ```json
 {
@@ -97,8 +123,10 @@ python app.py            # 开发方式
   "sizes": [
     {
       "name": "S", "cast_on": 12, "ok": true,
-      "rows": [{"line": 1, "instruction": "(k2tog yo)*{6|8|10}", "in": 12, "consume": 12, "produce": 12, "out": 12}],
-      "error": null, "final": 6
+      "rows": [{"line": 1, "instruction": "(k2tog yo)*{6|8|10}", "in": 12,
+                "consume": 12, "produce": 12, "out": 12, "weight": 13.8}],
+      "error": null, "final": 6,
+      "yarn": {"raw_total": 25.8, "with_waste": 28.38, "balls": 1, "partial": false}
     }
   ]
 }
@@ -106,11 +134,13 @@ python app.py            # 开发方式
 
 - 某尺码针数出现差额时仅该尺码停止，`error` 形如
   `{"line": 2, "type": "count", "diff": -1, "message": "...还剩 1 针未使用"}`，
-  其余尺码继续推算。
+  其余尺码继续推算；停止尺码的 `yarn.partial` 为 `true`。
 - 指令无法解析（含 `*{a|b}` 项数与尺码数不符、倍数非法）时所有尺码一并停止，
   `error` 形如 `{"line": 2, "type": "parse", "char": 2, "message": "...项数不符..."}`，
-  其中 `line` 为原文行号、`char` 为字符位置（均从 1 计）。
+  其中 `line` 为原文行号、`char` 为字符位置（均从 1 计）；所有尺码的
+  `yarn.partial` 均为 `true`。
 - 尺码列表非法时返回 `{"ok": false, "sizes": [], "error": {"type": "sizes", ...}}`。
+- 线材参数非法时返回 `{"ok": false, "sizes": [], "error": {"type": "yarn", ...}}`。
 
 ### 单尺码校验 `POST /api/validate`
 
@@ -146,12 +176,12 @@ python -m unittest discover -v
 ## 项目结构
 
 ```text
-app.py               Flask 应用与逐行推算逻辑（单尺码 + 多尺码接口）
-stitch_parser.py     指令词法/语法解析（算术累计，不展开重复项）
-templates/index.html 页面（尺码列表编辑 + 并排结果展示）
-static/app.js        原生 JavaScript 前端
+app.py               Flask 应用与逐行推算/线材用量逻辑（单尺码 + 多尺码接口）
+stitch_parser.py     指令词法/语法解析（针数与记号次数算术累计，不展开重复项）
+templates/index.html 页面（尺码列表、线材参数编辑 + 并排结果展示）
+static/app.js        原生 JavaScript 前端（逐行累计克重与用量摘要渲染）
 static/style.css     样式
 test_stitch_parser.py 解析器单元测试
-test_app.py          接口集成测试
+test_app.py          接口集成测试（含用量估算、部分估算、参数校验）
 Dockerfile / docker-compose.yml / requirements.txt
 ```

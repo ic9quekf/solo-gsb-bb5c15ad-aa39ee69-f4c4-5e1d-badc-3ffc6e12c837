@@ -8,7 +8,7 @@
 </head>
 <body>
   <main class="container">
-    <h1>编织说明逐行针数校验</h1>
+    <h1>编织说明逐行针数校验 · 线材用量估算</h1>
     <p class="hint">
       支持记号：<code>k</code>（消耗1/产出1）、<code>p</code>（消耗1/产出1）、
       <code>yo</code>（消耗0/产出1）、<code>k2tog</code>（消耗2/产出1），
@@ -31,8 +31,32 @@
           placeholder="(k2tog yo)*{6|8|10}&#10;p*{12|16|20}&#10;(k2tog)*{6|8|10}"></textarea>
       </label>
 
+      <fieldset class="field" id="yarn-fields">
+        <legend>线材用量估算（按该尺码实际记号次数累计）</legend>
+        <div class="yarn-grid">
+          <label>单个 <code>k</code> 克重
+            <input type="number" id="weight-k" min="0" step="0.1" value="1" inputmode="decimal" required>
+          </label>
+          <label>单个 <code>p</code> 克重
+            <input type="number" id="weight-p" min="0" step="0.1" value="1" inputmode="decimal" required>
+          </label>
+          <label>单个 <code>yo</code> 克重
+            <input type="number" id="weight-yo" min="0" step="0.1" value="0.3" inputmode="decimal" required>
+          </label>
+          <label>单个 <code>k2tog</code> 克重
+            <input type="number" id="weight-k2tog" min="0" step="0.1" value="2" inputmode="decimal" required>
+          </label>
+          <label>损耗百分比（%）
+            <input type="number" id="waste-percent" min="0" step="1" value="10" inputmode="decimal" required>
+          </label>
+          <label>每团克重
+            <input type="number" id="ball-grams" min="0" step="1" value="50" inputmode="decimal" required>
+          </label>
+        </div>
+      </fieldset>
+
       <div class="actions">
-        <button type="submit">校验</button>
+        <button type="submit">校验并估算用量</button>
         <button type="button" id="fill-example">填入示例</button>
       </div>
     </form>

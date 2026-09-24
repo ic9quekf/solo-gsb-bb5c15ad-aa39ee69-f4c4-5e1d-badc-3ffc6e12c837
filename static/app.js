@@ -7,6 +7,15 @@ const resultSection = document.getElementById('result');
 const summaryBox = document.getElementById('summary');
 const sizesResults = document.getElementById('sizes-results');
 
+const yarnInputs = {
+  k: document.getElementById('weight-k'),
+  p: document.getElementById('weight-p'),
+  yo: document.getElementById('weight-yo'),
+  k2tog: document.getElementById('weight-k2tog'),
+  waste_percent: document.getElementById('waste-percent'),
+  ball_grams: document.getElementById('ball-grams'),
+};
+
 const EXAMPLE_SIZES = [
   { name: 'S', cast_on: 12 },
   { name: 'M', cast_on: 16 },
@@ -72,6 +81,19 @@ function readSizes() {
   }));
 }
 
+function readYarn() {
+  return {
+    weights: {
+      k: yarnInputs.k.value,
+      p: yarnInputs.p.value,
+      yo: yarnInputs.yo.value,
+      k2tog: yarnInputs.k2tog.value,
+    },
+    waste_percent: yarnInputs.waste_percent.value,
+    ball_grams: yarnInputs.ball_grams.value,
+  };
+}
+
 document.getElementById('add-size').addEventListener('click', () => {
   addSizeRow('', '');
 });
@@ -99,6 +121,7 @@ form.addEventListener('submit', async (event) => {
       body: JSON.stringify({
         sizes: readSizes(),
         pattern: patternInput.value,
+        yarn: readYarn(),
       }),
     });
     data = await res.json();
@@ -131,6 +154,16 @@ function render(data) {
     summaryBox.className = 'error';
   }
 
+  const partial = data.sizes.filter((s) => s.yarn && s.yarn.partial);
+  if (partial.length > 0) {
+    const note = document.createElement('div');
+    note.className = 'partial-note';
+    note.textContent = '注意：' + partial.map((s) => s.name).join('、') +
+      ' 的用量为部分估算（该尺码在出错行停止，后续行未计入）。';
+    summaryBox.appendChild(document.createElement('br'));
+    summaryBox.appendChild(note);
+  }
+
   for (const size of data.sizes) {
     sizesResults.appendChild(renderSizeCard(size));
   }
@@ -161,10 +194,49 @@ function renderSizeCard(size) {
     card.appendChild(errBox);
   }
 
+  if (size.yarn) {
+    card.appendChild(buildYarnBox(size.yarn));
+  }
+
   if (size.rows.length > 0) {
-    card.appendChild(buildRowsTable(size.rows));
+    card.appendChild(buildRowsTable(size.rows, Boolean(size.yarn)));
   }
   return card;
+}
+
+function formatGrams(value) {
+  // 去掉浮点运算产生的多余尾零
+  return String(Math.round(value * 1000) / 1000);
+}
+
+function buildYarnBox(yarn) {
+  const box = document.createElement('div');
+  box.className = 'yarn-box' + (yarn.partial ? ' partial' : '');
+
+  const title = document.createElement('div');
+  title.className = 'yarn-title';
+  title.textContent = '线材用量' + (yarn.partial ? '（部分估算）' : '');
+  box.appendChild(title);
+
+  const rows = [
+    ['原始总量', formatGrams(yarn.raw_total) + ' g'],
+    ['含损耗总量', formatGrams(yarn.with_waste) + ' g'],
+    ['建议备线', yarn.balls + ' 团（向上取整）'],
+  ];
+  for (const [label, value] of rows) {
+    const line = document.createElement('div');
+    line.className = 'yarn-line';
+    const k = document.createElement('span');
+    k.className = 'yarn-label';
+    k.textContent = label;
+    const v = document.createElement('span');
+    v.className = 'yarn-value';
+    v.textContent = value;
+    line.appendChild(k);
+    line.appendChild(v);
+    box.appendChild(line);
+  }
+  return box;
 }
 
 function formatError(err) {
@@ -178,11 +250,15 @@ function formatError(err) {
   return err.message;
 }
 
-function buildRowsTable(rows) {
+function buildRowsTable(rows, withWeight) {
   const table = document.createElement('table');
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
-  for (const label of ['行号', '指令', '入针', '消耗', '产出', '出针']) {
+  const labels = ['行号', '指令', '入针', '消耗', '产出', '出针'];
+  if (withWeight) {
+    labels.push('累计克重');
+  }
+  for (const label of labels) {
     const th = document.createElement('th');
     th.textContent = label;
     headRow.appendChild(th);
@@ -193,7 +269,11 @@ function buildRowsTable(rows) {
   const tbody = document.createElement('tbody');
   for (const row of rows) {
     const tr = document.createElement('tr');
-    for (const value of [row.line, row.instruction, row.in, row.consume, row.produce, row.out]) {
+    const values = [row.line, row.instruction, row.in, row.consume, row.produce, row.out];
+    if (withWeight) {
+      values.push(formatGrams(row.weight) + ' g');
+    }
+    for (const value of values) {
       const td = document.createElement('td');
       td.textContent = value;
       tr.appendChild(td);
