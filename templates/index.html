@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>编织说明逐行针数校验</title>
+  <title>编织逐行针数校验与线材用量估算</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <main class="container">
-    <h1>编织说明逐行针数校验</h1>
+    <h1>编织逐行针数校验与线材用量估算</h1>
     <p class="hint">
       支持记号：<code>k</code>（消耗1/产出1）、<code>p</code>（消耗1/产出1）、
       <code>yo</code>（消耗0/产出1）、<code>k2tog</code>（消耗2/产出1），
@@ -16,6 +16,11 @@
       多尺码倍数写作 <code>*{6|8|10}</code>：竖线分隔的正整数按尺码顺序分别取值，
       项数须与尺码个数一致；普通 <code>*n</code> 对所有尺码生效，两种重复可互相嵌套。
       记号可用空格或逗号分隔，大小写不敏感。
+    </p>
+    <p class="hint">
+      填写下方线材参数后，会按每个尺码每行各记号的实际次数（嵌套与按尺码重复均计入）
+      累计克重，并给出含损耗总量与向上取整的线团数；某尺码遇针数错误停止后续行时，
+      其用量标记为“部分估算”。
     </p>
 
     <form id="check-form">
@@ -31,8 +36,38 @@
           placeholder="(k2tog yo)*{6|8|10}&#10;p*{12|16|20}&#10;(k2tog)*{6|8|10}"></textarea>
       </label>
 
+      <fieldset class="field yarn-field">
+        <legend>线材用量参数（克）</legend>
+        <div id="yarn-list" class="yarn-grid">
+          <label class="yarn-item">
+            <span><code>k</code> 单记号克重</span>
+            <input type="number" id="yarn-k" min="0" step="0.1" value="0.5" required>
+          </label>
+          <label class="yarn-item">
+            <span><code>p</code> 单记号克重</span>
+            <input type="number" id="yarn-p" min="0" step="0.1" value="0.5" required>
+          </label>
+          <label class="yarn-item">
+            <span><code>yo</code> 单记号克重</span>
+            <input type="number" id="yarn-yo" min="0" step="0.1" value="0.2" required>
+          </label>
+          <label class="yarn-item">
+            <span><code>k2tog</code> 单记号克重</span>
+            <input type="number" id="yarn-k2tog" min="0" step="0.1" value="1.0" required>
+          </label>
+          <label class="yarn-item">
+            <span>损耗百分比（%）</span>
+            <input type="number" id="yarn-waste" min="0" step="1" value="10" required>
+          </label>
+          <label class="yarn-item">
+            <span>每团克重</span>
+            <input type="number" id="yarn-ball" min="0" step="1" value="50" required>
+          </label>
+        </div>
+      </fieldset>
+
       <div class="actions">
-        <button type="submit">校验</button>
+        <button type="submit">校验并估算用量</button>
         <button type="button" id="fill-example">填入示例</button>
       </div>
     </form>

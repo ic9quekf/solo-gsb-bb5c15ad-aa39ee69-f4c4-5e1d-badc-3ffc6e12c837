@@ -6,6 +6,14 @@ const patternInput = document.getElementById('pattern');
 const resultSection = document.getElementById('result');
 const summaryBox = document.getElementById('summary');
 const sizesResults = document.getElementById('sizes-results');
+const yarnInputs = {
+  k: document.getElementById('yarn-k'),
+  p: document.getElementById('yarn-p'),
+  yo: document.getElementById('yarn-yo'),
+  k2tog: document.getElementById('yarn-k2tog'),
+  waste_percent: document.getElementById('yarn-waste'),
+  grams_per_ball: document.getElementById('yarn-ball'),
+};
 
 const EXAMPLE_SIZES = [
   { name: 'S', cast_on: 12 },
@@ -72,6 +80,17 @@ function readSizes() {
   }));
 }
 
+function readYarn() {
+  return {
+    k: yarnInputs.k.value,
+    p: yarnInputs.p.value,
+    yo: yarnInputs.yo.value,
+    k2tog: yarnInputs.k2tog.value,
+    waste_percent: yarnInputs.waste_percent.value,
+    grams_per_ball: yarnInputs.grams_per_ball.value,
+  };
+}
+
 document.getElementById('add-size').addEventListener('click', () => {
   addSizeRow('', '');
 });
@@ -99,6 +118,7 @@ form.addEventListener('submit', async (event) => {
       body: JSON.stringify({
         sizes: readSizes(),
         pattern: patternInput.value,
+        yarn: readYarn(),
       }),
     });
     data = await res.json();
@@ -161,10 +181,51 @@ function renderSizeCard(size) {
     card.appendChild(errBox);
   }
 
+  if (size.yarn) {
+    card.appendChild(buildYarnBox(size.yarn));
+  }
+
   if (size.rows.length > 0) {
-    card.appendChild(buildRowsTable(size.rows));
+    card.appendChild(buildRowsTable(size.rows, Boolean(size.yarn)));
   }
   return card;
+}
+
+function formatGrams(value) {
+  return Number(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+function buildYarnBox(yarn) {
+  const box = document.createElement('div');
+  box.className = 'yarn-box';
+
+  const title = document.createElement('div');
+  title.className = 'yarn-title';
+  title.textContent = '线材用量';
+  box.appendChild(title);
+
+  const lines = [
+    '原始总量：' + formatGrams(yarn.raw_total) + ' g',
+    '含损耗（+' + yarn.waste_percent + '%）：' + formatGrams(yarn.with_waste) + ' g',
+    '线团数（每团 ' + formatGrams(yarn.grams_per_ball) + ' g，向上取整）：' + yarn.balls + ' 团',
+  ];
+  for (const text of lines) {
+    const div = document.createElement('div');
+    div.className = 'yarn-line';
+    div.textContent = text;
+    box.appendChild(div);
+  }
+
+  if (yarn.partial) {
+    const tag = document.createElement('div');
+    tag.className = 'yarn-partial';
+    tag.textContent = '部分估算：该尺码在出错行停止，未包含后续行用量';
+    box.appendChild(tag);
+  }
+  return box;
 }
 
 function formatError(err) {
@@ -178,11 +239,15 @@ function formatError(err) {
   return err.message;
 }
 
-function buildRowsTable(rows) {
+function buildRowsTable(rows, withYarn) {
   const table = document.createElement('table');
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
-  for (const label of ['行号', '指令', '入针', '消耗', '产出', '出针']) {
+  const labels = ['行号', '指令', '入针', '消耗', '产出', '出针'];
+  if (withYarn) {
+    labels.push('累计克重');
+  }
+  for (const label of labels) {
     const th = document.createElement('th');
     th.textContent = label;
     headRow.appendChild(th);
@@ -193,7 +258,11 @@ function buildRowsTable(rows) {
   const tbody = document.createElement('tbody');
   for (const row of rows) {
     const tr = document.createElement('tr');
-    for (const value of [row.line, row.instruction, row.in, row.consume, row.produce, row.out]) {
+    const values = [row.line, row.instruction, row.in, row.consume, row.produce, row.out];
+    if (withYarn) {
+      values.push(formatGrams(row.weight) + ' g');
+    }
+    for (const value of values) {
       const td = document.createElement('td');
       td.textContent = value;
       tr.appendChild(td);

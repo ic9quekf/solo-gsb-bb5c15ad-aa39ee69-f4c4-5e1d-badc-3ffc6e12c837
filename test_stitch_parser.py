@@ -1,6 +1,12 @@
 import unittest
 
-from stitch_parser import ParseError, parse_row, parse_row_sizes
+from stitch_parser import (
+    ParseError,
+    parse_row,
+    parse_row_details,
+    parse_row_sizes,
+    parse_row_stitch_counts,
+)
 
 
 class TestParseRow(unittest.TestCase):
@@ -107,6 +113,60 @@ class TestParseRowSizes(unittest.TestCase):
         c, p = parse_row_sizes('(k yo)*{1000000000|1}', 2)
         self.assertEqual(c, [1000000000, 1])
         self.assertEqual(p, [2000000000, 2])
+
+
+class TestParseRowStitchCounts(unittest.TestCase):
+    def test_basic_stitch_counts(self):
+        tallies = parse_row_stitch_counts('k p yo k2tog', 1)
+        self.assertEqual(tallies['k'], [1])
+        self.assertEqual(tallies['p'], [1])
+        self.assertEqual(tallies['yo'], [1])
+        self.assertEqual(tallies['k2tog'], [1])
+
+    def test_repeat_multiplies_counts(self):
+        tallies = parse_row_stitch_counts('(k2tog yo)*6', 1)
+        self.assertEqual(tallies['k2tog'], [6])
+        self.assertEqual(tallies['yo'], [6])
+        self.assertEqual(tallies['k'], [0])
+
+    def test_nested_groups(self):
+        # ((k yo)*2 k2tog)*3：k=6, yo=6, k2tog=3
+        tallies = parse_row_stitch_counts('((k yo)*2 k2tog)*3', 1)
+        self.assertEqual(tallies['k'], [6])
+        self.assertEqual(tallies['yo'], [6])
+        self.assertEqual(tallies['k2tog'], [3])
+
+    def test_size_repeats_counted_per_size(self):
+        tallies = parse_row_stitch_counts('(k2tog yo)*{6|8|10}', 3)
+        self.assertEqual(tallies['k2tog'], [6, 8, 10])
+        self.assertEqual(tallies['yo'], [6, 8, 10])
+
+    def test_nested_mixed_repeats(self):
+        # (k*{2|3} yo)*2：k=[4,6]，yo=[2,2]
+        tallies = parse_row_stitch_counts('(k*{2|3} yo)*2', 2)
+        self.assertEqual(tallies['k'], [4, 6])
+        self.assertEqual(tallies['yo'], [2, 2])
+        self.assertEqual(tallies['p'], [0, 0])
+        self.assertEqual(tallies['k2tog'], [0, 0])
+
+    def test_atom_size_repeat(self):
+        tallies = parse_row_stitch_counts('k*{6|8|10}', 3)
+        self.assertEqual(tallies['k'], [6, 8, 10])
+
+    def test_huge_multiplier_count_not_expanded(self):
+        tallies = parse_row_stitch_counts('(k yo)*1000000000', 1)
+        self.assertEqual(tallies['k'], [1000000000])
+        self.assertEqual(tallies['yo'], [1000000000])
+
+    def test_details_matches_counts(self):
+        c, p, tallies = parse_row_details('((k yo)*2 k2tog)*3', 1)
+        self.assertEqual(c, [12])
+        self.assertEqual(p, [15])
+        self.assertEqual(tallies['k2tog'], [3])
+
+    def test_invalid_row_raises(self):
+        with self.assertRaises(ParseError):
+            parse_row_stitch_counts('ssk', 1)
 
 
 if __name__ == '__main__':

@@ -223,3 +223,62 @@ button.small {
   font-size: 0.9rem;
   font-weight: 600;
 }
+
+/* 线材用量参数输入 */
+.yarn-field {
+  border: 1px solid #c9c2b2;
+  border-radius: 6px;
+  padding: 10px 14px 14px;
+  margin-bottom: 14px;
+}
+
+.yarn-field legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+
+.yarn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px 16px;
+}
+
+.yarn-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.yarn-item span {
+  font-size: 0.9rem;
+  margin-bottom: 0;
+}
+
+.yarn-item input[type="number"] {
+  width: 100%;
+  max-width: none;
+}
+
+/* 尺码卡片中的线材用量 */
+.yarn-box {
+  background: #f3efe4;
+  border: 1px solid #e2dccb;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 0.92rem;
+  line-height: 1.8;
+}
+
+.yarn-title {
+  font-weight: 600;
+}
+
+.yarn-partial {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #fbeed3;
+  color: #8a611c;
+  font-weight: 600;
+}

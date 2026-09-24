@@ -11,9 +11,16 @@
 
 普通 *n 对所有尺码生效，*{a|b|c} 与 *n 两种重复可互相嵌套。
 解析只做算术累计，绝不展开重复项，因此 (k)*1000000000 也能瞬间算完。
+
+除消耗/产出针数外，解析器还可返回每种记号（k/p/yo/k2tog）在每行中每个
+尺码的实际出现次数（parse_row_details / parse_row_stitch_counts），供线材
+用量按“记号次数 × 单记号克重”累计。
 """
 
 import re
+
+# 记号顺序（稳定的遍历顺序）
+STITCH_NAMES = ('k', 'p', 'yo', 'k2tog')
 
 # 记号 -> (消耗针数, 产出针数)
 STITCH_COUNTS = {
@@ -78,8 +85,12 @@ class _Parser(object):
         return tok
 
     def parse_row(self):
-        """row := sequence EOF，返回 (consumes, produces) 两个长度 num_sizes 的列表"""
-        counts = self.parse_sequence()
+        """row := sequence EOF
+
+        返回 (consumes, produces, tallies)：consumes/produces 为长度 num_sizes
+        的针数列表；tallies 为 {记号名: 长度 num_sizes 的次数列表}。
+        """
+        c, p, tallies = self.parse_sequence()
         tok = self.peek()
         if tok is not None:
             kind, val, pos = tok
@@ -92,21 +103,24 @@ class _Parser(object):
                 raise ParseError(
                     "意外的 '*'（第 {} 个字符）：'*' 必须跟在记号或 ')' 之后".format(pos + 1), pos)
             raise ParseError("意外的记号 {!r}（第 {} 个字符）".format(val, pos + 1), pos)
-        return counts
+        return c, p, tallies
 
     def parse_sequence(self):
-        """sequence := item+，消耗/产出逐项累加"""
+        """sequence := item+，消耗/产出/记号次数逐项累加"""
         total_c = [0] * self.num_sizes
         total_p = [0] * self.num_sizes
+        total_t = {name: [0] * self.num_sizes for name in STITCH_NAMES}
         while True:
             tok = self.peek()
             if tok is None or tok[0] not in ('STITCH', 'LPAREN'):
                 break
-            c, p = self.parse_item()
+            c, p, tallies = self.parse_item()
             for j in range(self.num_sizes):
                 total_c[j] += c[j]
                 total_p[j] += p[j]
-        return total_c, total_p
+                for name in STITCH_NAMES:
+                    total_t[name][j] += tallies[name][j]
+        return total_c, total_p, total_t
 
     def parse_item(self):
         """item := (STITCH | '(' sequence ')') ('*' repeat)?"""
@@ -115,8 +129,10 @@ class _Parser(object):
             c0, p0 = STITCH_COUNTS[val.lower()]
             c = [c0] * self.num_sizes
             p = [p0] * self.num_sizes
+            tallies = {name: [0] * self.num_sizes for name in STITCH_NAMES}
+            tallies[val.lower()] = [1] * self.num_sizes
         else:  # LPAREN
-            c, p = self.parse_sequence()
+            c, p, tallies = self.parse_sequence()
             if not any(c) and not any(p):
                 raise ParseError("括号内不能为空（第 {} 个字符）".format(pos + 1), pos)
             tok = self.peek()
@@ -132,7 +148,11 @@ class _Parser(object):
             mults = self.parse_repeat(tok)
             c = [cv * m for cv, m in zip(c, mults)]
             p = [pv * m for pv, m in zip(p, mults)]
-        return c, p
+            tallies = {
+                name: [cnt * m for cnt, m in zip(counts, mults)]
+                for name, counts in tallies.items()
+            }
+        return c, p, tallies
 
     def parse_repeat(self, star_tok):
         """repeat := NUM | '{' NUM ('|' NUM)* '}'，返回长度 num_sizes 的倍数列表。
@@ -191,10 +211,12 @@ class _Parser(object):
         return n
 
 
-def parse_row_sizes(text, num_sizes):
-    """解析一行指令，返回 (consumes, produces)：各尺码的消耗/产出针数列表。
+def parse_row_details(text, num_sizes):
+    """解析一行指令，返回 (consumes, produces, tallies)。
 
-    两个列表长度均等于 num_sizes，按尺码顺序排列；非法输入抛出 ParseError。
+    consumes/produces 为各尺码的消耗/产出针数列表（长度 num_sizes）；
+    tallies 为 {记号名: 各尺码该记号次数列表}，嵌套重复与按尺码重复均按
+    实际次数算术累计（不展开重复项）。非法输入抛出 ParseError。
     """
     if num_sizes < 1:
         raise ValueError("num_sizes 必须为正整数")
@@ -204,7 +226,22 @@ def parse_row_sizes(text, num_sizes):
     return _Parser(tokens, num_sizes).parse_row()
 
 
+def parse_row_sizes(text, num_sizes):
+    """解析一行指令，返回 (consumes, produces)：各尺码的消耗/产出针数列表。
+
+    两个列表长度均等于 num_sizes，按尺码顺序排列；非法输入抛出 ParseError。
+    """
+    consumes, produces, _tallies = parse_row_details(text, num_sizes)
+    return consumes, produces
+
+
+def parse_row_stitch_counts(text, num_sizes):
+    """解析一行指令，返回各尺码的记号次数 {记号名: 长度 num_sizes 的次数列表}。"""
+    _c, _p, tallies = parse_row_details(text, num_sizes)
+    return tallies
+
+
 def parse_row(text):
     """单尺码解析：返回 (消耗针数, 产出针数)。非法输入抛出 ParseError。"""
-    consumes, produces = parse_row_sizes(text, 1)
+    consumes, produces, _tallies = parse_row_details(text, 1)
     return consumes[0], produces[0]
